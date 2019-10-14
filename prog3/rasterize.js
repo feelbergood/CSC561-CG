@@ -10,17 +10,12 @@ var Eye = new vec4.fromValues(0.5,0.5,-0.5,1.0); // default eye position in worl
 
 /* webgl globals */
 var gl = null; // the all powerful gl object. It's all here folks!
-var vertexBuffer; // this contains vertex coordinates in triples
+var vertexBuffer;
 var indexBuffer;
 var colorBuffer;
 var triBufferSize = 0; // the number of indices in the triangle buffer
 var vertexPositionAttrib; // where to put position for vertex shader
 var vertexColorAttrib;
-
-var triangleBuffer; // this contains indices into vertexBuffer in triples
-var altPosition; // flag indicating whether to alter vertex positions
-var altPositionUniform; // where to put altPosition flag for vertex shader
-
 
 // ASSIGNMENT HELPER FUNCTIONS
 
@@ -57,7 +52,7 @@ function setupWebGL() {
     // Get the canvas and context
     var canvas = document.getElementById("myWebGLCanvas"); // create a js canvas
     gl = canvas.getContext("webgl"); // get a webgl object from it
-    
+
     try {
       if (gl == null) {
         throw "unable to create gl context -- is your browser gl ready?";
@@ -90,7 +85,7 @@ function loadTriangles() {
         for (var whichSet=0; whichSet<inputTriangles.length; whichSet++) {
             vec3.set(indexOffset, vertexBufferSize, vertexBufferSize, vertexBufferSize);
             // set up the vertex coord array
-            for (whichSetVert=0; whichSetVert<inputTriangles[whichSet].vertices.length; whichSetVert++){
+            for (whichSetVert=0; whichSetVert<inputTriangles[whichSet].vertices.length; whichSetVert++) {
                 var coord = inputTriangles[whichSet].vertices[whichSetVert]
                 var color = inputTriangles[whichSet].material.diffuse;
                 coordArray.push(coord[0], coord[1], coord[2]);
@@ -115,9 +110,10 @@ function loadTriangles() {
         gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colorArray), gl.STATIC_DRAW);
 
-        indexBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexArray), gl.STATIC_DRAW);
+        // send triangle indices to webGL
+        indexBuffer = gl.createBuffer(); // init empty triangle index buffer
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer); // activate that buffer
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexArray), gl.STATIC_DRAW); // indices to that buffer
     } // end if triangles found
 } // end load triangles
 
@@ -137,7 +133,6 @@ function setupShaders() {
         attribute vec3 vertexPosition;
         attribute vec3 vertexColor;
         varying lowp vec3 fragColor;
-
         void main(void) {
             gl_Position = vec4(vertexPosition, 1.0); // use the untransformed position
             fragColor = vertexColor;
@@ -188,16 +183,18 @@ function setupShaders() {
 // render the loaded model
 function renderTriangles() {
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
-
+    
     // vertex buffer: activate and feed into vertex shader
     gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer); // activate
     gl.vertexAttribPointer(vertexPositionAttrib,3,gl.FLOAT,false,0,0); // feed
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-    gl.vertexAttribPointer(vertexColorAttrib, 3, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer); // activate
+    gl.vertexAttribPointer(vertexColorAttrib, 3, gl.FLOAT, false, 0, 0) // feed
 
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
-    gl.drawArrays(gl.TRIANGLES, triBufferSize, gl.UNSIGNED_SHORT, 0); // render
+    // triangle buffer: activate and render
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,indexBuffer); // activate
+    gl.drawElements(gl.TRIANGLES, triBufferSize, gl.UNSIGNED_SHORT,0); // render
+    
 } // end render triangles
 
 

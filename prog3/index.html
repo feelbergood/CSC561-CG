@@ -2,13 +2,50 @@
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>Prog 2: Rasterization Shell</title>
+    <title>Program 3 2019: rasterization, projection, transforms and lighting</title>
 
     <script type="text/javascript" src="gl-matrix-min.js"></script>
+    <script type="text/javascript" src="interaction.js"></script>
     <script type="text/javascript" src="rasterize.js"></script>
   </head>
 
   <body onload="main();">
-    <canvas id="myWebGLCanvas" width="512" height="512"></canvas>
+    <div>
+      <p>Projection Mode: <span id="mode">Perspective</span></p>
+      <p>Selected Model: <span id="modelIndex">None</span></p>
+    </div>
+    <div>
+      <canvas id="myWebGLCanvas" width="512" height="512"></canvas>
+    </div>
+    <div>
+      <h3>Instructions:</h3>
+      <h4>Part 3: Interactively change view</h4>
+      <ul>
+        <li>a and d — translate view left and right along view X</li>
+        <li>w and s — translate view forward and backward along view Z</li>
+        <li>q and e — translate view up and down along view Y</li>
+        <li>A and D — rotate view left and right around view Y (yaw)</li>
+        <li>W and S — rotate view forward and backward around view X (pitch)</li>
+      </ul>
+      <h4>Part 4: Interactively select a model</h4>
+      <ul>
+        <li>left and right — select and highlight the next/previous triangle set (previous off)</li>
+        <li>space — deselect and turn off highlight</li>
+      </ul>
+      <h4>Part 5: Interactively change projection globally to all models</h4>
+      <ul>
+        <li> < — use perspective projection (the default)</li>
+        <li> = — use parallel projection</li>
+      </ul>
+      <h4>Part 6: Interactively transform (selected) model</h4>
+      <ul>
+        <li>k and ; — translate selection left and right along view X</li>
+        <li>o and l — translate selection forward and backward along view Z</li>
+        <li>i and p — translate selection up and down along view Y</li>
+        <li>K and : — rotate selection left and right around view Y (yaw)</li>
+        <li>O and L — rotate selection forward and backward around view X (pitch)</li>
+        <li>I and P — rotate selection clockwise and counterclockwise around view Z (roll)</li>
+      </ul>
+    </div>
   </body>
 </html>

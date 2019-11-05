@@ -11,9 +11,12 @@ var lightPosition = vec3.fromValues(-0.5, 1.5, -0.5); // default light position
 var gl = null; // the all powerful gl object. It's all here folks!
 var inputTriangles = []; // the triangle data as loaded from input files
 var numTriangleSets = 0; // how many triangle sets in input scene
-var vertexBuffers = []; // this contains vertex coordinate lists by set, in triples
 var triSetSizes = []; // this contains the size of each triangle set
+var vertexBuffers = []; // this contains vertex coordinate lists by set, in triples
 var triangleBuffers = []; // lists of indices into vertexBuffers by set, in triples
+var normalBuffers = [];
+var textureBuffers = [];
+var sortedTriangles = [];
 
 var isBlinnPhong;
 var isLit;
@@ -58,6 +61,24 @@ function getJSONFile(url, descr) {
         return (String.null);
     }
 } // end get input json file
+
+function getTexture(url) {
+    var img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = url;
+    var texture = gl.createTexture();
+    // gl.pixelStorei();
+    img.onload = function () {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D,0, gl.RGBA,gl.RGBA, gl.UNSIGNED_BYTE, img); 
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+    }
+    return texture;
+}
 
 // set up the webGL environment
 function setupWebGL() {
@@ -117,6 +138,7 @@ function loadModels() {
             numTriangleSets = inputTriangles.length; // remember how many tri sets
             for (var whichSet = 0; whichSet < numTriangleSets; whichSet++) { // for each tri set
                 // set up the vertex arrays, define model center and axes
+                inputTriangles[whichSet].center = vec3.fromValues(0, 0, 0);
                 inputTriangles[whichSet].glVertices = []; // flat coord list for webgl
                 inputTriangles[whichSet].glNormals = [];
                 inputTriangles[whichSet].glUVs = [];
@@ -129,12 +151,29 @@ function loadModels() {
                     inputTriangles[whichSet].glVertices.push(vtxToAdd[0], vtxToAdd[1], vtxToAdd[2]); // put coords in set coord list
                     inputTriangles[whichSet].glNormals.push(normToAdd[0], normToAdd[1], normToAdd[2]);
                     inputTriangles[whichSet].glUVs.push(uvToAdd[0], uvToAdd[1], uvToAdd[2]);
+                    vec3.add(inputTriangles[whichSet].center, inputTriangles[whichSet].center, vtxToAdd);
                 } // end for vertices in set
+                vec3.scale(inputTriangles[whichSet].center, inputTriangles[whichSet].center, 1/numVerts);
+
+                sortedTriangles.push({index: whichSet, 
+                                    center: inputTriangles[whichSet].center,
+                                    depth: 0});
 
                 // send the vertex coords to webGL
                 vertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
                 gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers[whichSet]); // activate that buffer
                 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].glVertices), gl.STATIC_DRAW); // data in
+
+                normalBuffers[whichSet] = gl.createBuffer();
+                gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffers[whichSet]);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].glNormals), gl.STATIC_DRAW);
+
+                textureBuffers[whichSet] = gl.createBuffer();
+                gl.bindBuffer(gl,ARRAY_BUFFER, textureBuffers[whichSet]);
+                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].glUVs), gl.STATIC_DRAW);
+
+                var imgSrc = "https://ncsucgclass.github.io/prog4/"+inputTriangles[whichSet].material.texture;
+                inputTriangles[whichSet].texture = getTexture(imgSrc);
 
                 // set up the triangle index array, adjusting indices across sets
                 inputTriangles[whichSet].glTriangles = []; // flat index list for webgl

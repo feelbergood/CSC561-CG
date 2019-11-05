@@ -13,13 +13,13 @@ function onKeydown(e) {
         // A and D — rotate view left and right around view Y (yaw)
         // W and S — rotate view forward and backward around view X (pitch)
         case "a":
-            eye[0] -= dist;
-            lookCenter[0] -= rotation;
+            eye[0] += dist;
+            lookCenter[0] += rotation;
             console.log("translate view left along view X");
             break;
         case "d":
-            eye[0] += dist;
-            lookCenter[0] += rotation;
+            eye[0] -= dist;
+            lookCenter[0] -= rotation;
             console.log("translate view right along view X");
             break;
         case "w":
@@ -33,21 +33,21 @@ function onKeydown(e) {
             console.log("translate view backward along view Z");
             break;
         case "q":
-            eye[1] -= dist;
-            lookCenter[1] -= rotation;
+            eye[1] += dist;
+            lookCenter[1] += rotation;
             console.log("translate view up along view Y");
             break;
         case "e":
-            eye[1] += dist;
-            lookCenter[1] += rotation;
+            eye[1] -= dist;
+            lookCenter[1] -= rotation;
             console.log("translate view down along view Y");
             break;
         case "A":
-            lookCenter[0] -= rotation;
+            lookCenter[0] += rotation;
             console.log("rotate view left around view Y (yaw)");
             break;
         case "D":
-            lookCenter[0] += rotation;
+            lookCenter[0] -= rotation;
             console.log("rotate view right around view Y (yaw)");
             break;
         case "W":

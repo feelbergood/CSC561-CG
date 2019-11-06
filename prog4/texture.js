@@ -1,246 +1,275 @@
 /* GLOBAL CONSTANTS AND VARIABLES */
 
 /* assignment specific globals */
+const WIN_Z = 0;  // default graphics window z coord in world space
+const WIN_LEFT = 0; const WIN_RIGHT = 1;  // default left and right x coords in world space
+const WIN_BOTTOM = 0; const WIN_TOP = 1;  // default top and bottom y coords in world space
 const INPUT_TRIANGLES_URL = "https://ncsucgclass.github.io/prog4/triangles.json"; // triangles file loc
-var defaultEye = vec3.fromValues(0.5, 0.5, -0.5); // default eye position in world space
-var lightAmbient = vec3.fromValues(1, 1, 1);
-var lightDiffuse = vec3.fromValues(1, 1, 1); // default light diffuse emission
-var lightSpecular = vec3.fromValues(1, 1, 1);
-var lightPosition = vec3.fromValues(-0.5, 1.5, -0.5); // default light position
-/* webgl and geometry data */
+const INPUT_LIGHTS_URL = "https://ncsucgclass.github.io/prog4/lights.json";
+
+var inputTriangles;
+var inputLights;
+
+var eye = new vec3.fromValues(0.5, 0.5, -0.5); // default eye position in world space
+var viewUp = new vec3.fromValues(0, 1, 0);
+var lookAt = new vec3.fromValues(0, 0, 1);
+var lookCenter = new vec3.fromValues(0.5, 0.5, 0);
+
+/* webgl globals */
 var gl = null; // the all powerful gl object. It's all here folks!
-var inputTriangles = []; // the triangle data as loaded from input files
-var numTriangleSets = 0; // how many triangle sets in input scene
-var triSetSizes = []; // this contains the size of each triangle set
-var vertexBuffers = []; // this contains vertex coordinate lists by set, in triples
-var triangleBuffers = []; // lists of indices into vertexBuffers by set, in triples
-var normalBuffers = [];
-var textureBuffers = [];
-var sortedTriangles = [];
-
-var isBlinnPhong;
-var isLit;
-var isLightMapped;
-
-/* shader parameter locations */
-var vPosAttribLoc; // where to put position for vertex shader
-var vNormAttribLoc;
-var vTextureAttribLoc;
-var ambientULoc;
-var diffuseULoc; // where to put diffuse reflecivity for fragment shader
-var specularULoc;
-var nULoc;
-var alphaULoc;
-var blinnPhongULoc;
+var shaderProgram;
+var isPerspective = true;
+var vertexBuffer = [];
+var indexBuffer = [];
+var normalBuffer = [];
+var textureBuffer = [];
+var setCenters = [];
+var isBlinnPhong = true;
 
 // ASSIGNMENT HELPER FUNCTIONS
 
 // get the JSON file from the passed URL
-function getJSONFile(url, descr) {
+function getJSONFile(url,descr) {
     try {
-        if ((typeof (url) !== "string") || (typeof (descr) !== "string"))
+        if ((typeof(url) !== "string") || (typeof(descr) !== "string"))
             throw "getJSONFile: parameter not a string";
         else {
             var httpReq = new XMLHttpRequest(); // a new http request
-            httpReq.open("GET", url, false); // init the request
+            httpReq.open("GET",url,false); // init the request
             httpReq.send(null); // send the request
             var startTime = Date.now();
             while ((httpReq.status !== 200) && (httpReq.readyState !== XMLHttpRequest.DONE)) {
-                if ((Date.now() - startTime) > 3000)
+                if ((Date.now()-startTime) > 3000)
                     break;
             } // until its loaded or we time out after three seconds
             if ((httpReq.status !== 200) || (httpReq.readyState !== XMLHttpRequest.DONE))
-                throw "Unable to open " + descr + " file!";
+                throw "Unable to open "+descr+" file!";
             else
-                return JSON.parse(httpReq.response);
+                return JSON.parse(httpReq.response); 
         } // end if good params
     } // end try    
-
-    catch (e) {
+    
+    catch(e) {
         console.log(e);
-        return (String.null);
+        return(String.null);
     }
-} // end get input json file
+} // end get input spheres
+
+function onKeydown(e) {
+    var key = e.key;
+    switch(key) {
+        case "u":
+            // Show the unlit texture
+            break;
+        case "m":
+            // Show the lightmapped texture
+            break;
+        case "b":
+            // Show Blinn-Phong mixed with texture
+            break;
+        default:
+            break;
+    }
+}
 
 function getTexture(url) {
-    var img = new Image();
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    // gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    var texture = gl.createTexture();
+    var img = new Image(); 
     img.crossOrigin = "Anonymous";
     img.src = url;
-    var texture = gl.createTexture();
-    // gl.pixelStorei();
-    img.onload = function () {
+    img.onload = function() {
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D,0, gl.RGBA,gl.RGBA, gl.UNSIGNED_BYTE, img); 
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texImage2D(gl.TEXTURE_2D,0, gl.RGBA,gl.RGBA, gl.UNSIGNED_BYTE, img);
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+        // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
         gl.bindTexture(gl.TEXTURE_2D, null);
-    }
+    } // end onload callback
     return texture;
 }
 
 // set up the webGL environment
 function setupWebGL() {
-
     // Get the image canvas, render an image in it
     var imageCanvas = document.getElementById("myImageCanvas"); // create a 2d canvas
-    var cw = imageCanvas.width, ch = imageCanvas.height;
-    imageContext = imageCanvas.getContext("2d");
-    var bkgdImage = new Image();
+    var cw = imageCanvas.width, ch = imageCanvas.height; 
+    imageContext = imageCanvas.getContext("2d"); 
+    var bkgdImage = new Image(); 
     bkgdImage.crossOrigin = "Anonymous";
     bkgdImage.src = "https://ncsucgclass.github.io/prog4/sky.jpg";
-    bkgdImage.onload = function () {
+    bkgdImage.onload = function(){
         var iw = bkgdImage.width, ih = bkgdImage.height;
-        imageContext.drawImage(bkgdImage, 0, 0, iw, ih, 0, 0, cw, ch);
+        imageContext.drawImage(bkgdImage,0,0,iw,ih,0,0,cw,ch);   
     } // end onload callback
 
-    // create a webgl canvas and set it up
-    var webGLCanvas = document.getElementById("myWebGLCanvas"); // create a webgl canvas
-    gl = webGLCanvas.getContext("webgl"); // get a webgl object from it
+    // Get the canvas and context
+    var canvas = document.getElementById("myWebGLCanvas"); // create a js canvas
+    gl = canvas.getContext("webgl"); // get a webgl object from it
+
     try {
-        if (gl == null) {
-            throw "unable to create gl context -- is your browser gl ready?";
-        } else {
-            //gl.clearColor(0.0, 0.0, 0.0, 1.0); // use black when we clear the frame buffer
-            gl.clearDepth(1.0); // use max when we clear the depth buffer
-            gl.enable(gl.DEPTH_TEST); // use hidden surface removal (with zbuffering)
-        }
+      if (gl == null) {
+        throw "unable to create gl context -- is your browser gl ready?";
+      } else {
+        // gl.clearColor(0.0, 0.0, 0.0, 1.0); // use black when we clear the frame buffer
+        gl.clearDepth(1.0); // use max when we clear the depth buffer
+        gl.enable(gl.DEPTH_TEST); // use hidden surface removal (with zbuffering)
+        gl.viewportWidth = canvas.width;
+        gl.viewportHeight = canvas.height;
+      }
     } // end try
-
-
-    catch (e) {
-        console.log(e);
+    catch(e) {
+      console.log(e);
     } // end catch
-
+ 
 } // end setupWebGL
 
-// read models in, load them into webgl buffers
-function loadModels() {
-
-
-    inputTriangles = getJSONFile(INPUT_TRIANGLES_URL, "triangles"); // read in the triangle data
-
-    try {
-        if (inputTriangles == String.null)
-            throw "Unable to load triangles file!";
-        else {
-
+// read triangles in, load them into webgl buffers
+function loadTriangles() {
+    inputTriangles = getJSONFile(INPUT_TRIANGLES_URL,"triangles");
+    if (inputTriangles != String.null) { 
+        for (var whichSet=0; whichSet<inputTriangles.length; whichSet++) {
             var whichSetVert; // index of vertex in current triangle set
             var whichSetTri; // index of triangle in current triangle set
-            var vtxToAdd; // vtx coords to add to the coord array
-            var triToAdd; // tri indices to add to the index array
-            var normToAdd;
-            var uvToAdd;
-            
+            var coordArray = []; // 1D array of vertex coords for WebGL
+            var indexArray = [];
+            var normalArray = [];
+            var uvArray = [];
+            var triCenter = vec3.create();
+            // set up the vertex coord array
+            for (whichSetVert = 0; whichSetVert<inputTriangles[whichSet].vertices.length; whichSetVert++) {
+                var coord = inputTriangles[whichSet].vertices[whichSetVert];
+                var norm = inputTriangles[whichSet].normals[whichSetVert];
+                var uv = inputTriangles[whichSet].uvs[whichSetVert];
+                coordArray.push(coord[0], coord[1], coord[2]);
+                normalArray.push(norm[0], norm[1], norm[2]);
+                uvArray.push(uv[0], uv[1]);
+                // console.log(inputTriangles[whichSet].vertices[whichSetVert]);
+            }
+            for (whichSetTri = 0; whichSetTri < inputTriangles[whichSet].triangles.length; whichSetTri++) {
+                var tri = inputTriangles[whichSet].triangles[whichSetTri];
+                indexArray.push(tri[0], tri[1], tri[2]);
+                for (var i=0; i<3;i++) {
+                    vec3.scaleAndAdd(triCenter, triCenter, inputTriangles[whichSet].vertices[tri[i]], 1/3);
+                }
+            }
+            setCenters[whichSet] = vec3.create();
+            vec3.scale(setCenters[whichSet], triCenter, 1/inputTriangles[whichSet].triangles.length);
 
-            // process each triangle set to load webgl vertex and triangle buffers
-            numTriangleSets = inputTriangles.length; // remember how many tri sets
-            for (var whichSet = 0; whichSet < numTriangleSets; whichSet++) { // for each tri set
-                // set up the vertex arrays, define model center and axes
-                inputTriangles[whichSet].center = vec3.fromValues(0, 0, 0);
-                inputTriangles[whichSet].glVertices = []; // flat coord list for webgl
-                inputTriangles[whichSet].glNormals = [];
-                inputTriangles[whichSet].glUVs = [];
+            // send the vertex coords to webGL
+            vertexBuffer[whichSet] = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER,vertexBuffer[whichSet]); // activate that buffer
+            gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(coordArray),gl.STATIC_DRAW); // coords to that buffer
 
-                var numVerts = inputTriangles[whichSet].vertices.length; // num vertices in tri set
-                for (whichSetVert = 0; whichSetVert < numVerts; whichSetVert++) { // verts in set
-                    vtxToAdd = inputTriangles[whichSet].vertices[whichSetVert]; // get vertex to add
-                    normToAdd = inputTriangles[whichSet].normals[whichSetVert];
-                    uvToAdd = inputTriangles[whichSet].uvs[whichSetVert];
-                    inputTriangles[whichSet].glVertices.push(vtxToAdd[0], vtxToAdd[1], vtxToAdd[2]); // put coords in set coord list
-                    inputTriangles[whichSet].glNormals.push(normToAdd[0], normToAdd[1], normToAdd[2]);
-                    inputTriangles[whichSet].glUVs.push(uvToAdd[0], uvToAdd[1], uvToAdd[2]);
-                    vec3.add(inputTriangles[whichSet].center, inputTriangles[whichSet].center, vtxToAdd);
-                } // end for vertices in set
-                vec3.scale(inputTriangles[whichSet].center, inputTriangles[whichSet].center, 1/numVerts);
+            // send triangle indices to webGL
+            indexBuffer[whichSet] = gl.createBuffer(); // init empty triangle index buffer
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer[whichSet]); // activate that buffer
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexArray), gl.STATIC_DRAW); // indices to that buffer
+            indexBuffer[whichSet].bufferSize = inputTriangles[whichSet].triangles.length * 3;
 
-                sortedTriangles.push({index: whichSet, 
-                                    center: inputTriangles[whichSet].center,
-                                    depth: 0});
+            normalBuffer[whichSet] = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer[whichSet]);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normalArray), gl.STATIC_DRAW);
 
-                // send the vertex coords to webGL
-                vertexBuffers[whichSet] = gl.createBuffer(); // init empty webgl set vertex coord buffer
-                gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers[whichSet]); // activate that buffer
-                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].glVertices), gl.STATIC_DRAW); // data in
+            textureBuffer[whichSet] = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer[whichSet]);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uvArray), gl.STATIC_DRAW);
 
-                normalBuffers[whichSet] = gl.createBuffer();
-                gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffers[whichSet]);
-                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].glNormals), gl.STATIC_DRAW);
+            var imgUrl = "https://ncsucgclass.github.io/prog4/"+inputTriangles[whichSet].material.texture;
+            // var imgUrl = "https://ncsucgclass.github.io/prog4/"+inputTriangles[whichSet].material.texture;
+            inputTriangles[whichSet].glTextures = getTexture(imgUrl);
 
-                textureBuffers[whichSet] = gl.createBuffer();
-                gl.bindBuffer(gl,ARRAY_BUFFER, textureBuffers[whichSet]);
-                gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(inputTriangles[whichSet].glUVs), gl.STATIC_DRAW);
-
-                var imgSrc = "https://ncsucgclass.github.io/prog4/"+inputTriangles[whichSet].material.texture;
-                inputTriangles[whichSet].texture = getTexture(imgSrc);
-
-                // set up the triangle index array, adjusting indices across sets
-                inputTriangles[whichSet].glTriangles = []; // flat index list for webgl
-                triSetSizes[whichSet] = inputTriangles[whichSet].triangles.length; // number of tris in this set
-                for (whichSetTri = 0; whichSetTri < triSetSizes[whichSet]; whichSetTri++) {
-                    triToAdd = inputTriangles[whichSet].triangles[whichSetTri]; // get tri to add
-                    inputTriangles[whichSet].glTriangles.push(triToAdd[0], triToAdd[1], triToAdd[2]); // put indices in set list
-                } // end for triangles in set
-
-                // send the triangle indices to webGL
-                triangleBuffers.push(gl.createBuffer()); // init empty triangle index buffer
-                gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffers[whichSet]); // activate that buffer
-                gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(inputTriangles[whichSet].glTriangles), gl.STATIC_DRAW); // data in
-
-            } // end for each triangle set 
-
-        } // end if triangle file loaded
-    } // end try 
-
-    catch (e) {
-        console.log(e);
-    } // end catch
-} // end load models
+            inputTriangles[whichSet].tfMatrix = mat4.create();
+        } // end for each triangle set 
+    } // end if triangles found
+} // end load triangles
 
 // setup the webGL shaders
 function setupShaders() {
-
-    // define vertex shader in essl using es6 template strings
-    var vShaderCode = `
-        attribute vec3 aVertexPosition; // vertex position
-
-        void main(void) {
-            
-            gl_Position = vec4(aVertexPosition, 1.0);
-
-        }
-    `;
-
+    
     // define fragment shader in essl using es6 template strings
     var fShaderCode = `
-        precision mediump float; // set float to medium precision
-        uniform vec3 uDiffuse; // the diffuse reflectivity
-            
+        precision mediump float;
+        uniform vec3 lightPos;
+        uniform vec3 lightAmbient;
+        uniform vec3 lightDiffuse;
+        uniform vec3 lightSpecular;
+        uniform vec3 eyePos;
+        
+        uniform vec3 materialAmbient;
+        uniform vec3 materialDiffuse;
+        uniform vec3 materialSpecular;
+        uniform float materialN;
+
+        varying vec3 mVertexPos;
+        varying vec3 mVertexNorm;
+        varying vec2 vTexturePosition;
+        uniform sampler2D uSampler;
+        uniform bool isBlinnPhong;
+        uniform float uAlpha;
+
         void main(void) {
-            gl_FragColor = vec4(uDiffuse, 1.0); 
+            vec3 lightDir = normalize(lightPos - mVertexPos);
+            vec3 viewDir = normalize(eyePos - mVertexPos);
+            vec3 normNorm = normalize(mVertexNorm);
+            vec3 H = normalize(lightDir + viewDir);
+            float diffuseFactor = max(dot(normNorm, lightDir), 0.0);
+            float specularFactor = pow(max(0.0, dot(H, normNorm)), materialN);
+
+            vec3 color = lightAmbient * materialAmbient + 
+                            lightDiffuse * materialDiffuse * diffuseFactor + 
+                            lightSpecular * materialSpecular * specularFactor;
+
+            vec4 textureColor = texture2D(uSampler, vTexturePosition); 
+
+            // gl_FragColor = vec4(color, 1.0);
+            gl_FragColor = vec4(textureColor);
         }
     `;
+    
+    // define vertex shader in essl using es6 template strings
+    var vShaderCode = `
+        attribute vec3 vertexPos;
+        attribute vec3 vertexNorm;
+        attribute vec2 aTexturePosition;
+        uniform mat4 mMatrix;
+        uniform mat4 pOrOMatrix;
+        uniform mat4 vMatrix;
+        uniform mat3 nMatrix;
+        varying vec3 mVertexPos;
+        varying vec3 mVertexNorm;
+        varying vec2 vTexturePosition;
 
+        void main(void) {
+            gl_Position = pOrOMatrix * vMatrix * mMatrix * vec4(vertexPos, 1.0);
+            mVertexPos = vec3(mMatrix * vec4(vertexPos, 1.0));
+            mVertexNorm = nMatrix * vertexNorm;
+            vTexturePosition = aTexturePosition;
+        }
+    `;
+    
     try {
-
+        // console.log("fragment shader: "+fShaderCode);
         var fShader = gl.createShader(gl.FRAGMENT_SHADER); // create frag shader
-        gl.shaderSource(fShader, fShaderCode); // attach code to shader
+        gl.shaderSource(fShader,fShaderCode); // attach code to shader
         gl.compileShader(fShader); // compile the code for gpu execution
 
+        // console.log("vertex shader: "+vShaderCode);
         var vShader = gl.createShader(gl.VERTEX_SHADER); // create vertex shader
-        gl.shaderSource(vShader, vShaderCode); // attach code to shader
+        gl.shaderSource(vShader,vShaderCode); // attach code to shader
         gl.compileShader(vShader); // compile the code for gpu execution
-
+            
         if (!gl.getShaderParameter(fShader, gl.COMPILE_STATUS)) { // bad frag shader compile
-            throw "error during fragment shader compile: " + gl.getShaderInfoLog(fShader);
+            throw "error during fragment shader compile: " + gl.getShaderInfoLog(fShader);  
             gl.deleteShader(fShader);
         } else if (!gl.getShaderParameter(vShader, gl.COMPILE_STATUS)) { // bad vertex shader compile
-            throw "error during vertex shader compile: " + gl.getShaderInfoLog(vShader);
+            throw "error during vertex shader compile: " + gl.getShaderInfoLog(vShader);  
             gl.deleteShader(vShader);
         } else { // no compile errors
-
-            var shaderProgram = gl.createProgram(); // create the single shader program
+            shaderProgram = gl.createProgram(); // create the single shader program
             gl.attachShader(shaderProgram, fShader); // put frag shader in program
             gl.attachShader(shaderProgram, vShader); // put vertex shader in program
             gl.linkProgram(shaderProgram); // link program into gl context
@@ -248,58 +277,125 @@ function setupShaders() {
             if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) { // bad program link
                 throw "error during shader program linking: " + gl.getProgramInfoLog(shaderProgram);
             } else { // no shader program link errors
-
                 gl.useProgram(shaderProgram); // activate shader program (frag and vert)
+                // get pointer to vertex shader input
+                shaderProgram.vertexPos = gl.getAttribLocation(shaderProgram, "vertexPos");
+                shaderProgram.vertexNorm = gl.getAttribLocation(shaderProgram, "vertexNorm");
+                shaderProgram.textureAttrib = gl.getAttribLocation(shaderProgram, "aTexturePosition");
+                gl.enableVertexAttribArray(shaderProgram.textureAttrib);
 
-                // locate and enable vertex attributes
-                vPosAttribLoc = gl.getAttribLocation(shaderProgram, "aVertexPosition"); // ptr to vertex pos attrib
-                gl.enableVertexAttribArray(vPosAttribLoc); // connect attrib to array
+                shaderProgram.mMatrix = gl.getUniformLocation(shaderProgram, "mMatrix");
+                shaderProgram.vMatrix = gl.getUniformLocation(shaderProgram, "vMatrix");
+                shaderProgram.pOrOMatrix = gl.getUniformLocation(shaderProgram, "pOrOMatrix");
+                shaderProgram.nMatrix = gl.getUniformLocation(shaderProgram, "nMatrix");
 
-                // locate fragment uniforms
-                diffuseULoc = gl.getUniformLocation(shaderProgram, "uDiffuse"); // ptr to diffuse
+                shaderProgram.lightPos = gl.getUniformLocation(shaderProgram, "lightPos");
+                shaderProgram.lightAmbient = gl.getUniformLocation(shaderProgram, "lightAmbient");
+                shaderProgram.lightDiffuse = gl.getUniformLocation(shaderProgram, "lightDiffuse");
+                shaderProgram.lightSpecular = gl.getUniformLocation(shaderProgram, "lightSpecular");
+                shaderProgram.eyePos = gl.getUniformLocation(shaderProgram, "eyePos");
 
+                shaderProgram.materialAmbient = gl.getUniformLocation(shaderProgram, "materialAmbient");
+                shaderProgram.materialDiffuse = gl.getUniformLocation(shaderProgram, "materialDiffuse");
+                shaderProgram.materialSpecular = gl.getUniformLocation(shaderProgram, "materialSpecular");
+                shaderProgram.materialN = gl.getUniformLocation(shaderProgram, "materialN");
+
+                shaderProgram.samplerULoc = gl.getUniformLocation(shaderProgram, "uSampler");
+                shaderProgram.blinnPhongULoc = gl.getUniformLocation(shaderProgram, "isBlinnPhong");
+                shaderProgram.alphaULoc = gl.getUniformLocation(shaderProgram, "uAlpha");
             } // end if no shader program link errors
         } // end if no compile errors
     } // end try 
-
-    catch (e) {
+    
+    catch(e) {
         console.log(e);
     } // end catch
 } // end setup shaders
 
 // render the loaded model
-function renderModels() {
+function renderTriangles() {
+    window.requestAnimationFrame(renderTriangles);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    loadLights();
+    gl.uniform3fv(shaderProgram.eyePos, eye);
+    // Viewing Matrix
+    var vMatrix = mat4.create();
+    mat4.lookAt(vMatrix, eye, lookCenter, viewUp);
+    // Perspective Matrix
+    var pOrOMatrix = mat4.create();
+    if (isPerspective) {
+        mat4.perspective(pOrOMatrix, Math.PI/2, gl.viewportWidth/gl.viewportHeight, 0.1, 100);
+    } else {
+        mat4.ortho(pOrOMatrix, -1.0, 1.0, -1.0, 1.0, 0.1, 100);
+    }
+    gl.uniformMatrix4fv(shaderProgram.vMatrix, false, vMatrix);
+    gl.uniformMatrix4fv(shaderProgram.pOrOMatrix, false, pOrOMatrix);
 
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); // clear frame/depth buffers
+    for (var whichSet=0; whichSet<inputTriangles.length; whichSet++) {
+        var material = inputTriangles[whichSet].material;
+        gl.uniform3fv(shaderProgram.materialAmbient, material.ambient);
+        gl.uniform3fv(shaderProgram.materialDiffuse, material.diffuse);
+        gl.uniform3fv(shaderProgram.materialSpecular, material.specular);
+        gl.uniform1f(shaderProgram.materialN, material.n);
 
-    // render each triangle set
-    var currSet; // the tri set and its material properties
+        // Model Matrix
+        var mMatrix = mat4.create();
+        mat4.translate(mMatrix, mMatrix, setCenters[whichSet]);
+        mat4.multiply(mMatrix, mMatrix, inputTriangles[whichSet].tfMatrix);
+        mat4.translate(mMatrix, mMatrix, vec3.negate(vec3.create(), setCenters[whichSet]));
+        gl.uniformMatrix4fv(shaderProgram.mMatrix, false, mMatrix);
 
-    for (var whichTriSet = 0; whichTriSet < numTriangleSets; whichTriSet++) {
-
-        currSet = inputTriangles[whichTriSet];
-        // reflectivity: feed to the fragment shader
-        gl.uniform3fv(diffuseULoc, currSet.material.diffuse); // pass in the diffuse reflectivity
+        // Normal Transform Matrix
+        var nMatrix = mat3.create();
+        mat3.normalFromMat4(nMatrix, mMatrix);
+        // smooth shading with vertex normals
+        mat3.invert(nMatrix, nMatrix);
+        mat3.transpose(nMatrix, nMatrix);
+        gl.uniformMatrix3fv(shaderProgram.nMatrix, false, nMatrix);
 
         // vertex buffer: activate and feed into vertex shader
-        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffers[whichTriSet]); // activate
-        gl.vertexAttribPointer(vPosAttribLoc, 3, gl.FLOAT, false, 0, 0); // feed
+        gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer[whichSet]); // activate
+        gl.vertexAttribPointer(shaderProgram.vertexPos, 3, gl.FLOAT, false, 0, 0); // feed
+        gl.enableVertexAttribArray(shaderProgram.vertexPos); // input to shader from array
 
-        // triangle buffer: activate and render
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, triangleBuffers[whichTriSet]); // activate
-        gl.drawElements(gl.TRIANGLES, 3 * triSetSizes[whichTriSet], gl.UNSIGNED_SHORT, 0); // render
+        // normal buffer: activate and feed into vertex shader
+        gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer[whichSet]); // activate
+        gl.vertexAttribPointer(shaderProgram.vertexNorm, 3, gl.FLOAT, false, 0, 0); // feed
+        gl.enableVertexAttribArray(shaderProgram.vertexNorm);
 
-    } // end for each triangle set
-} // end render model
+        gl.bindBuffer(gl.ARRAY_BUFFER, textureBuffer[whichSet]);
+        gl.vertexAttribPointer(shaderProgram.textureAttrib, 2, gl.FLOAT, false, 0, 0);
+        // gl.enableVertexAttribArray(shaderProgram.textureAttrib);
 
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, inputTriangles[whichSet].glTextures);
+        gl.uniform1i(shaderProgram.samplerULoc, 0);
+        gl.uniform1i(shaderProgram.blinnPhongULoc, isBlinnPhong);
+        gl.uniform1f(shaderProgram.alphaULoc, inputTriangles[whichSet].material.alpha);
+
+        // index buffer: activate and feed into vertex shader
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer[whichSet]); // activate
+        gl.drawElements(gl.TRIANGLES, indexBuffer[whichSet].bufferSize, gl.UNSIGNED_SHORT, 0); // render
+    }
+
+
+} // end render triangles
+
+function loadLights() {
+    inputLights = getJSONFile(INPUT_LIGHTS_URL,"lights");
+    var light = inputLights[0];
+    gl.uniform3f(shaderProgram.lightPos, light.x, light.y, light.z);
+    gl.uniform3fv(shaderProgram.lightAmbient, light.ambient);
+    gl.uniform3fv(shaderProgram.lightDiffuse, light.diffuse);
+    gl.uniform3fv(shaderProgram.lightSpecular, light.specular);
+}
 
 /* MAIN -- HERE is where execution begins after window load */
 
 function main() {
-
     setupWebGL(); // set up the webGL environment
-    loadModels(); // load in the models from tri file
+    loadTriangles(); // load in the triangles from tri file
     setupShaders(); // setup the webGL shaders
-    renderModels(); // draw the triangles using webGL
-
+    renderTriangles(); // draw the triangles using webGL
+  
 } // end main

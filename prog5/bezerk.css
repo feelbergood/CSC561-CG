@@ -1,3 +1,10 @@
-#gameCanvas {
-    left: "25%";
+#status {
+    position: absolute;
+    color: white;
+    top: 300px;
+	width: 800px;
+    text-align: center;
+    font-size: 40px;
+	z-index: 100;
+	display: none;
 }

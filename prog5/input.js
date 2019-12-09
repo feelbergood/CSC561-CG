@@ -9,30 +9,25 @@ function onKeydown(e) {
             // W and S — rotate view forward and backward around view X (pitch)
             case "w":
                 player.position.y += playerSpeed;
-                direction = [0, 1];
+                player.direction = [0, 1];
                 break;
             case "a":
                 player.position.x -= playerSpeed;
-                direction = [-1, 0];
+                player.direction = [-1, 0];
                 break;
             case "s":
                 player.position.y -= playerSpeed;
-                direction = [0, -1];
+                player.direction = [0, -1];
                 break;
             case "d":
                 player.position.x += playerSpeed;
-                direction = [1, 0];
+                player.direction = [1, 0];
                 break;
             case " ":
-                if (direction[0] !== 0 || direction[1] !== 0) {
-                    console.log("fire!");
-                    var newBullet = new THREE.Mesh( bulletGeometry, bulletMaterial );
-                    newBullet.position.x = player.position.x;
-                    newBullet.position.y = player.position.y;
-                    newBullet.direction = direction;
-                    bullets.push(newBullet);
-                    scene.add(newBullet);
+                if (player.direction[0] !== 0 || player.direction[1] !== 0) {
+                    initNewBullet(player, bullets, bulletMaterial);
                 }
+                break;
             default:
                 break;
         }

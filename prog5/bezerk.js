@@ -9,12 +9,7 @@ function collide(obj1, obj2) {
 		var directionVector = globalVertex.sub( obj1.position );
         // Get ray from object center to current vertex
 		var ray = new THREE.Raycaster( originPoint, directionVector.clone().normalize() );
-        var collisionResults;
-        if (obj2.length) { // If obj2 is a list
-            collisionResults = ray.intersectObjects( obj2 );
-        } else { // If obj2 is an object
-            collisionResults = ray.intersectObject( obj2 );
-        }
+        var collisionResults = ray.intersectObjects( obj2 );
         if ( collisionResults.length > 0 && collisionResults[0].distance < directionVector.length() ) {
 			return true; 
         }
@@ -47,6 +42,44 @@ function moveBetween(robot, start, end, dir)
     }
 }
 
+function moveTo(robot, end, dir) {
+    if (dir[0] === 0) {
+        if (dir[1] === 1 && robot.position.y < end) {
+            robot.position.y += dir[1] * robotSpeed;
+        }
+        if (dir[1] === -1 && robot.position.y > end) {
+            robot.position.y += dir[1] * robotSpeed;
+        }
+    }
+    
+    if (dir[1] === 0) {
+        if (dir[0] === 1 && robot.position.x < end) {
+            robot.position.x += dir[0] * robotSpeed;
+        }
+        if (dir[1] === -1 && robot.position.x > end) {
+            robot.position.x += dir[0] * robotSpeed;
+        }
+    }
+}
+
+function initNewBullet(playerOrRobot, bulletList, bulletMaterial) {
+    var newBullet = new THREE.Mesh( bulletGeometry, bulletMaterial );
+    newBullet.position.x = playerOrRobot.position.x;
+    newBullet.position.y = playerOrRobot.position.y;
+    newBullet.position.z = playerOrRobot.position.z;
+    newBullet.direction = playerOrRobot.direction;
+    newBullet.fireBy = playerOrRobot.name;
+    bulletList.push(newBullet);
+    scene.add(newBullet);
+}
+
+function removeItem(itemList, item) {
+    scene.remove(item);
+    if (itemList.indexOf(item) > -1) {
+        itemList.splice(itemList.indexOf(item), 1);
+    }
+}
+
 // Global variables
 var gameOver = false;
 var score = 0;
@@ -70,6 +103,7 @@ document.body.appendChild( renderer.domElement );
 var playerGeometry = new THREE.BoxGeometry( 0.2, 0.4, 0.2 );
 var playerMaterial = new THREE.MeshBasicMaterial( { color: 0xdeb887 } );
 var player = new THREE.Mesh( playerGeometry, playerMaterial );
+player.name = "Player";
 
 // Init walls
 var wallMaterial = new THREE.MeshBasicMaterial( { color: 0x6a5acd } );
@@ -109,7 +143,9 @@ var walls = [leftWall, rightWall, topWall, bottomWallLeft, bottomWallRight, insi
 var bulletGeometry = new THREE.SphereGeometry( 0.05, 10, 10 );
 // var bulletGeometry = new THREE.BoxGeometry( 0.1, 0.1, 0.1 );
 var bulletMaterial = new THREE.MeshBasicMaterial( { color: 0xdeb887 } );
+var robotBulletMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
 var bullets = [];
+var robotBullets = [];
 
 // Init robots
 var robotGeometry = new THREE.BoxGeometry( 0.1, 0.4, 0.2 );
@@ -117,28 +153,34 @@ var robotMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
 var robots = [];
 
 var robot1 = new THREE.Mesh( robotGeometry, robotMaterial );
+robot1.name = "Robot1";
 robot1.position.x = -3;
 robot1.position.y = 0;
-robot1.bullets = [];
 robots.push(robot1);
 
 var robot2 = new THREE.Mesh( robotGeometry, robotMaterial );
+robot2.name = "Robot2";
 robot2.position.x = 3;
-robot2.position.y = 0;
-robot2.bullets = [];
+robot2.position.y = 2;
 robots.push(robot2);
 
 var robot3 = new THREE.Mesh( robotGeometry, robotMaterial );
+robot3.name = "Robot3";
 robot3.position.x = -1;
 robot3.position.y = 2;
-robot3.bullets = [];
 robots.push(robot3);
 
 var robot4 = new THREE.Mesh( robotGeometry, robotMaterial );
+robot4.name = "Robot4";
 robot4.position.x = -3;
 robot4.position.y = -2;
-robot4.bullets = [];
 robots.push(robot4);
+
+var robot5 = new THREE.Mesh( robotGeometry, robotMaterial );
+robot5.name = "Robot5";
+robot5.position.x = 0;
+robot5.position.y = -2;
+robots.push(robot5);
 
 // Add meshes to scene
 for (var wall of walls) {
@@ -154,53 +196,114 @@ scene.add( player );
 // Adjust camera
 camera.position.z = 5;
 
+setInterval(() => {
+    if (!gameOver) {
+        for (var rb of robotBullets) {
+            removeItem(robotBullets, rb);
+        }
+        for (var rbt of robots) {
+            initNewBullet(rbt, robotBullets, robotBulletMaterial);
+        }
+    }
+}, 2000);
+
 // Game loop
 var animate = function () {
-    // Collision between player and wall
+    // Collision between player and wall/robots
     if (collide(player, walls) || collide(player, robots)) {
         gameOver = true;
         document.getElementById("status").style.display = "block";
     }
-    
-    // Collision between wall and bullet
-    for (var blt of bullets) {
-        for (var r of robots) {
-            if (collide(r, blt)) {
-                scene.remove(blt);
-                if (bullets.indexOf(blt) > -1) {
-                    bullets.splice(bullets.indexOf(blt), 1);
+    if (!gameOver) {
+        for (var blt of bullets) {
+            // Collision between bullets and robots
+            for (var r of robots) {
+                if (collide(r, [blt])) {
+                    removeItem(robotBullets, blt);
+                    removeItem(robots, r);
+                    score += 100;
+                    console.log(score);
                 }
-                scene.remove(r);
-                if (robots.indexOf(r) > -1) {
-                    robots.splice(robots.indexOf(r), 1);
-                }
-                score += 100;
-                console.log(score);
+            }
+            // Collision between bullets and walls
+            if (collide(blt, walls)) {
+                console.log("bullet collides wall");
+                setTimeout(() => {
+                    removeItem(bullets, blt);
+                }, 1000);
+            } else {
+                blt.position.x += blt.direction[0] * bulletSpeed;
+                blt.position.y += blt.direction[1] * bulletSpeed;
             }
         }
-        if (collide(blt, walls)) {
-            console.log("bullet collides wall");
-            setTimeout(() => {
-                scene.remove(blt);
-                if (bullets.indexOf(blt) > -1) {
-                    bullets.splice(bullets.indexOf(blt), 1);
-                }
-            }, 1000);
-        } else {
-            blt.position.x += blt.direction[0] * bulletSpeed;
-            blt.position.y += blt.direction[1] * bulletSpeed;
-        }
-    }
 
-    if (!gameOver) {
+        // Periodic movement of robots
         moveBetween(robot1, 0, 2, true);
-        moveBetween(robot2, 0, 2, true);
+        // moveBetween(robot2, 0, 2, true);
+        moveTo(robot2, 0, [0, -1]);
         moveBetween(robot3, -1, 1, false);
-        moveBetween(robot4, -3, 3, false);
-        for (var rbt of robots) {
+        // moveBetween(robot4, -3, 3, false);
+        moveTo(robot4, 3, [1, 0]);
+        for (var rb of robotBullets) {
+            if (rb.position.x !== 0 || rb.position.y !== 0 || rb.position.z !== 0) {
+                if (collide(player, [rb])) {
+                    gameOver = true;
+                    document.getElementById("status").style.display = "block";
+                    // removeItem(robotBullets, rb);
+                }
+                for (var rt of robots) {
+                    if (collide(rb, [rt]) && rb.fireBy !== rt.name) {
+                        // robot hit by robot bullet
+                        for (var rb1 of robotBullets) {
+                            if (rb1.fireBy === rt.name) {
+                                removeItem(robotBullets, rb1);
+                            }
+                        }
+                        removeItem(robotBullets, rb);
+                        removeItem(robots, rt);
+                    }
+                }
+            }
+            switch (rb.fireBy) {
+                case "Robot1":
+                    if (collide(rb, [insideWall3])) {
+                        removeItem(robotBullets, rb);
+                    } else {
+                        rb.position.y -= bulletSpeed;
+                    }
+                    break;
+                case "Robot2":
+                    if (collide(rb, [insideWall3])) {
+                        removeItem(robotBullets, rb);
+                    } else {
+                        rb.position.y -= bulletSpeed;
+                    }
+                    break;
+                case "Robot3":
+                    if (collide(rb, [insideWall2])) {
+                        removeItem(robotBullets, rb);
+                    } else {
+                        rb.position.x += bulletSpeed;
+                    }
+                    break;
+                case "Robot4":
+                    if (collide(rb, [leftWall])) {
+                        removeItem(robotBullets, rb);
+                    } else {
+                        rb.position.x -= bulletSpeed;
+                    }
+                    break;
+                case "Robot5":
+                    if (collide(rb, [leftWall])) {
+                        removeItem(robotBullets, rb);
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
+        
     }
-
     requestAnimationFrame( animate );
     renderer.render( scene, camera );
 };

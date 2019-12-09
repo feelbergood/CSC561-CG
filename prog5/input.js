@@ -1,3 +1,12 @@
+function play(audio) {
+    if (audio.paused) {
+        audio.play();
+    } else {
+        audio.pause();
+        audio.currentTime = 0;
+    }
+}
+
 function onKeydown(e) {
     if (!gameOver) {
         var key = e.key.toLowerCase();
@@ -26,7 +35,25 @@ function onKeydown(e) {
             case " ":
                 if (player.direction[0] !== 0 || player.direction[1] !== 0) {
                     initNewBullet(player, bullets, bulletMaterial);
+                    var fireAudio = document.querySelector("#fire");
+                    play(fireAudio);
                 }
+                break;
+            case "v":
+                if (viewType === "normal") {
+                    viewType = "OTS";
+                    camera.position.z = 2;
+                    camera.position.y = -7;
+                    camera.rotation.x = 1.2;
+                } else {
+                    viewType = "normal";
+                    camera.position.z = 5;
+                    camera.position.y = 0;
+                    camera.rotation.x = 0;
+                }
+                break;
+            case "p":
+                play(document.querySelector("#bgmusic"));
                 break;
             default:
                 break;

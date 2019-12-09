@@ -8,3 +8,14 @@
 	z-index: 100;
 	display: none;
 }
+
+#score {
+    position: absolute;
+    color: white;
+    top: 0px;
+	width: 100px;
+    text-align: start;
+    font-size: 20px;
+	z-index: 100;
+	display: block;
+}

@@ -88,6 +88,7 @@ var playerSpeed = 0.1;
 var robotSpeed = 0.03;
 var bulletSpeed = 0.1;
 var robotBulletSpeed = 0.05;
+var viewType = "normal";
 
 // Threejs setup
 var scene = new THREE.Scene();
@@ -221,8 +222,9 @@ var animate = function () {
                 if (collide(r, [blt])) {
                     removeItem(robotBullets, blt);
                     removeItem(robots, r);
+                    document.querySelector("#explosion").play();
                     score += 100;
-                    console.log(score);
+                    document.getElementById("score").innerHTML = `Score: ${score}`;
                 }
             }
             // Collision between bullets and walls
